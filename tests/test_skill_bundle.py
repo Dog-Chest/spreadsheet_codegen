@@ -17,7 +17,10 @@ skill 是**给 agent 看的操作手册**，本身不参与构建、不被 impor
 from __future__ import annotations
 
 import re
+import shutil
+import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -147,8 +150,6 @@ def test_asset_config_validates(relative: str) -> None:
 
 def test_asset_library_skeleton_runs_end_to_end(tmp_path: Path) -> None:
     """骨架要能一路跑到 ``check`` 退出码 0 —— 否则 agent 的第一步就失败。"""
-    import shutil
-
     dest = tmp_path / "library"
     shutil.copytree(SKILL_DIR / "assets" / "library-skeleton", dest)
     config = str(dest / "project.yaml")
@@ -164,18 +165,45 @@ def test_asset_library_skeleton_runs_end_to_end(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 4. scripts：语法与可执行位
+# 4. scripts：shebang、语法、可执行位
+#
+# 真要跑 bash 的用例在 Windows 上一律 skip —— 与 tests/test_run_scripts.py 同一条规矩
+# （Windows 上 PATH 是 Unix 格式，也没有可执行位）。
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("name", ["preflight.sh", "new-library.sh"])
-def test_script_is_executable_and_parses(name: str) -> None:
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="执行 .sh 需要 POSIX shell")
+
+SCRIPT_NAMES = ("preflight.sh", "new-library.sh")
+
+
+@pytest.mark.parametrize("name", SCRIPT_NAMES)
+def test_script_has_shebang(name: str) -> None:
     path = SKILL_DIR / "scripts" / name
     assert path.is_file(), f"缺脚本：scripts/{name}"
     assert path.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash"), f"{name} 缺 shebang"
 
+
+@posix_only
+@pytest.mark.parametrize("name", SCRIPT_NAMES)
+def test_script_parses(name: str) -> None:
+    path = SKILL_DIR / "scripts" / name
     checked = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True, check=False)
     assert checked.returncode == 0, f"{name} 语法错误：{checked.stderr}"
 
 
+@posix_only
+def test_scripts_have_the_executable_bit() -> None:
+    """git 里存的是 100755。
+
+    这个位**不会**自己产生：本仓库的 NTFS 挂载上 ``core.filemode=false``，直接
+    ``git add`` 会把新脚本记成 100644（clone 下来不能 ``./`` 跑）。所以新增脚本时要
+    ``git add --chmod=+x``，这条测试是那个动作的回归。
+    """
+    for name in SCRIPT_NAMES:
+        mode = (SKILL_DIR / "scripts" / name).stat().st_mode
+        assert mode & stat.S_IXUSR, f"scripts/{name} 少了可执行位"
+
+
+@posix_only
 def test_new_library_script_scaffolds_the_bundle(tmp_path: Path) -> None:
     """``new-library.sh`` 生成的东西必须与 assets 里的骨架一致（它就是拷贝那个目录）。"""
     dest = tmp_path / "scaffold"
