@@ -34,6 +34,13 @@ runner = CliRunner()
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / ".agents" / "skills" / "spreadsheet-codegen"
 
+#: ``.agents/`` 是**仓库侧**资产（给 agent 看的操作手册），不是包数据 —— ``MANIFEST.in``
+#: 不收它，就像 ``abs_fpi/`` 被 prune 掉一样。而 ``tests/`` 是收进 sdist 的，CI 会把 sdist
+#: 解包后整套跑一遍 pytest：那时这个文件在、目录却不在。所以整模块 skip，而不是失败。
+#: （同一条规矩见 ``tests/test_abs_fpi_group.py`` 里的 ``_require``。）
+if not SKILL_DIR.is_dir():  # pragma: no cover - 只有 sdist / 裁剪过的安装会走到
+    pytest.skip("`.agents/skills/` 不在（sdist 里不带 skill 包）", allow_module_level=True)
+
 #: catalog 里每条 description 的渲染上限（dsh-tool-skill 的 catalogDescriptionMaxLength）。
 DESCRIPTION_MAX_LENGTH = 500
 
