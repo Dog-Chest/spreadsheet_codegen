@@ -1,6 +1,6 @@
 ---
 name: spreadsheet-codegen
-description: "用 Excel 当参数填写界面、用 YAML + Jinja2 当模板库来生成代码。当用户要把一组只有参数不同、结构几乎一样的代码做成可复用的生成器，要求「在 Excel 里填参数、改一格代码就跟着变」，要把工况表或参数表变成 C / JS / Python / NASTRAN / CSV / 配置文件，要新建或维护 spreadsheet-codegen 的 YAML 模板库（init、render、validate、check、doctor，公式模式与快照模式，prefix/suffix，case_filter，extends，成员表），或要排查「check 说输出过期」「模板语法报错」「公式模式不支持 Jinja 循环或过滤器」时使用。"
+description: "把一组只有参数不同、结构几乎一样的代码或配置，做成「在 Excel 里填参数 → 代码自动跟着变」的生成器（Excel-driven / spreadsheet-driven code generation）。当用户要把重复代码模板化、想让工程师在表格里填参数而不用碰命令行、要把工况表 / 参数表 / 设备表变成 C / JS / Python / NASTRAN / CSV / JSON / 配置文件、要新建或维护 spreadsheet-codegen 的 YAML 模板库（init、render、validate、check、doctor；公式模式与快照模式；prefix/suffix；case_filter；extends；成员表），或要排查「check 说输出过期」「模板语法报错」「公式模式不支持 Jinja 循环或过滤器」「变量未定义」时使用。"
 ---
 
 # spreadsheet-codegen：把参数表变成代码生成器
@@ -167,23 +167,25 @@ CI 里就该按这个分流 —— 3 可以自动重渲染，2 必须交给人�
 - **单个变量跨 Case 联动**做不到，要在 Excel 里用公式。
 - 生成的是**工程计算代码**时，交付话术里要提醒用户独立复核（这个仓库自己的免责声明就是这个口径）。
 
-## 8. 深入材料怎么读
+## 8. 参考资料
 
-先读 `references/`（本 skill 自带，与工具版本绑定）：
+本 skill **自包含**：把这个文件夹整个拷走，不依赖任何外部文档、也不依赖仓库布局。
 
 | 文件 | 什么时候读 |
 | --- | --- |
+| [`references/yaml-reference.md`](references/yaml-reference.md) | **字段级权威定义**：根节点 / `excel` / 变量 / 模板 / `extends` / 成员表 / `asserts` 的每个字段、默认值与报错 |
 | [`references/engine-preflight.md`](references/engine-preflight.md) | 定引擎、公式模式报错、公式太长、值不一致 |
 | [`references/excel-layout.md`](references/excel-layout.md) | 要告诉人"在哪张表哪一列填"、改布局、成员表 |
-| [`references/cli-and-errors.md`](references/cli-and-errors.md) | 六个命令的选项、退出码分流、报错对照表 |
+| [`references/cli-and-errors.md`](references/cli-and-errors.md) | 六个命令的选项、退出码分流、报错对照表、Python 库用法 |
 | [`references/pitfalls.md`](references/pitfalls.md) | 症状 → 成因 → 修法；真实项目里翻过的车 |
 
-需要字段级权威定义时，读**仓库里的**文档（本 skill 就住在仓库里，`../../../` 是仓库根）：
+要**能真正打开**的完整示例（不只是片段），用工具自带的包内示例 —— 不联网、不克隆任何仓库：
 
-- `../../../docs/template_guide.md` —— 20 节的完整指南（§2 字段、§3 变量、§4 前后缀、
-  §14 公式模式、§15 派生参数、§16 `extends`、§18 成员表、§19 布局）
-- `../../../docs/cli.md` —— 命令参考、作为 Python 库使用、错误类型
-- `../../../spreadsheet_codegen/examples/` —— 三个可直接打开的工作簿示例
-- `../../../abs_fpi/TEMPLATES.md` —— 真实项目的"加规范清单"与踩坑表
+```bash
+spreadsheet-codegen examples                 # 看有哪三个、各自演示什么
+spreadsheet-codegen examples --copy ./demo   # 拷出来，每本工作簿都已填好样例参数
+```
 
-> 这个文件夹被单独拷走时，上面几条相对路径会失效 —— 那就以 `references/` 为准。
+`assets/` 里另有三个最小起点：`minimal-formula.yaml`（公式模式）、`minimal-snapshot.yaml`
+（快照模式）、`library-skeleton/`（`extends` + `case_filter` + `asserts` 的骨架，
+配 `scripts/new-library.sh` 一键铺开）。

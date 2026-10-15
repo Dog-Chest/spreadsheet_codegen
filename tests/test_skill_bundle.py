@@ -8,8 +8,10 @@ skill 是**给 agent 看的操作手册**，本身不参与构建、不被 impor
    frontmatter 一旦解析失败，provider 会**静默跳过整个 skill** —— 不报错，它只是不再存在。
    这个坑真的踩过：``description`` 里写了 ``engine: excel``，冒号加空格让 YAML 把它当成了
    mapping，整个 skill 就消失了。所以这里用 PyYAML **真解析一遍**。
-2. **相对路径**：SKILL.md 用 ``../../../docs/template_guide.md`` 指回仓库文档。文档改名或挪目录
-   之后，agent 会照着一条死链去读，然后开始猜 —— 比 skill 不存在更糟。这里逐条解析。
+2. **自包含**：agent skill 的用法就是"把这个文件夹拷到某个被扫描的根下"，所以包内**不许**
+   引用包外的任何路径。SKILL.md 一度用 ``../../../docs/template_guide.md`` 指回仓库 ——
+   拷到 ``~/.dsh/skills/`` 或别的项目里，那些链接就全死了，而 agent 会照着死链去读、
+   然后开始猜，比 skill 不存在更糟。这里既查链接、也**真拷出去跑一遍**。
 3. **assets**：``assets/`` 里的 YAML 是"拷走就能用"的起点，必须真的能过 ``validate``，
    而且骨架能一路跑到 ``check`` 退出码 0。
 """
@@ -110,37 +112,82 @@ def test_no_nested_skill_files() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 2. 相对路径：死链比"skill 不存在"更糟 —— agent 会照着它去读，然后开始猜
+# 2. 自包含：拷到别处还能用，是 skill 的全部意义
+#
+# 死链比"skill 不存在"更糟 —— agent 会照着它去读，然后开始猜。
 # --------------------------------------------------------------------------- #
-def test_repo_relative_references_resolve() -> None:
-    """SKILL.md 里 ``../../../docs/xxx.md`` 这类指回仓库的路径必须存在。
+def _escapes_bundle(path: Path, target: str) -> bool:
+    """``target``（相对 ``path`` 所在目录）解析后是否跑到 skill 包外。"""
+    resolved = (path.parent / target.rstrip("/")).resolve()
+    root = SKILL_DIR.resolve()
+    return resolved != root and root not in resolved.parents
 
-    注意它是**相对声明它的那个文件**解析的：所以 ``../../../`` 只在 SKILL.md（skill 根）里成立，
-    写进 ``references/`` 就会指到别处 —— 这条测试正是拦这个。
-    """
-    pattern = re.compile(r"(\.\./[\w./\-]*)")
-    missing: list[str] = []
+
+def test_no_reference_escapes_the_bundle() -> None:
+    """包内正文不许出现指向包外的相对路径（裸路径与 markdown 链接都算）。"""
+    offenders: list[str] = []
     for path in _skill_markdown():
-        for match in pattern.finditer(path.read_text(encoding="utf-8")):
-            target = (path.parent / match.group(1).rstrip("/")).resolve()
-            if not target.exists():
-                missing.append(f"{path.relative_to(SKILL_DIR)} → {match.group(1)}")
-    assert not missing, f"指回仓库的相对路径解析不到（文档改名/挪目录了？）：{missing}"
+        text = path.read_text(encoding="utf-8")
+        targets = [match.group(1) for match in re.finditer(r"(\.\./[\w./\-]*)", text)]
+        targets += [
+            match.group(1).strip()
+            for match in re.finditer(r"\]\(([^)]+)\)", text)
+            if not match.group(1).strip().startswith(("http://", "https://", "mailto:", "#"))
+        ]
+        for target in targets:
+            if _escapes_bundle(path, target):
+                offenders.append(f"{path.relative_to(SKILL_DIR)} → {target}")
+    assert not offenders, (
+        "skill 包里出现了指向包外的路径 —— 这个文件夹被单独拷走（~/.dsh/skills/、别的项目）"
+        f"之后它们会全部失效：{offenders}"
+    )
 
 
 def test_markdown_links_resolve() -> None:
-    """包内 markdown 链接（`](...)`）指向的文件必须存在，且不能指到包外。"""
-    pattern = re.compile(r"\]\(([^)]+)\)")
+    """包内 markdown 链接（`](...)`）指向的文件必须存在。"""
     broken: list[str] = []
     for path in _skill_markdown():
-        for match in pattern.finditer(path.read_text(encoding="utf-8")):
+        for match in re.finditer(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
             target = match.group(1).strip()
             if target.startswith(("http://", "https://", "mailto:", "#")):
                 continue
-            resolved = (path.parent / target).resolve()
-            if not resolved.exists():
+            if not (path.parent / target).resolve().exists():
                 broken.append(f"{path.relative_to(SKILL_DIR)} → {target}")
     assert not broken, f"包内链接指向了不存在的文件：{broken}"
+
+
+@pytest.fixture(scope="module")
+def copied_bundle(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """把整个 skill 文件夹拷到别处 —— 就是用户"单独把它拿走"时发生的事。"""
+    dest = tmp_path_factory.mktemp("skill-copy") / "spreadsheet-codegen"
+    shutil.copytree(SKILL_DIR, dest)
+    return dest
+
+
+def test_assets_still_validate_after_the_bundle_is_copied_out(copied_bundle: Path) -> None:
+    """拷到包外之后，四个 asset 仍然 validate 得通（路径没写死成仓库布局）。"""
+    for relative in ASSET_CONFIGS:
+        path = copied_bundle / relative
+        assert path.is_file(), f"拷出来后缺 asset：{relative}"
+        result = runner.invoke(app, ["validate", "-c", str(path)])
+        assert result.exit_code == 0, f"拷出来后 {relative} validate 失败：{_output(result)}"
+
+
+def test_new_library_script_works_from_the_copied_bundle(copied_bundle: Path, tmp_path: Path) -> None:
+    """``new-library.sh`` 靠 ``脚本目录/../assets`` 找骨架 —— 拷走后这条相对路径必须还对。"""
+    if sys.platform == "win32":  # pragma: no cover - 与下面 posix_only 同一条规矩
+        pytest.skip("执行 .sh 需要 POSIX shell")
+
+    dest = tmp_path / "scaffold"
+    result = subprocess.run(
+        ["bash", str(copied_bundle / "scripts" / "new-library.sh"), str(dest)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"从拷贝出来的包里跑 new-library.sh 失败：{result.stderr}"
+    checked = runner.invoke(app, ["validate", "-c", str(dest / "project.yaml")])
+    assert checked.exit_code == 0, f"生成出来的骨架 validate 失败：{_output(checked)}"
 
 
 # --------------------------------------------------------------------------- #
