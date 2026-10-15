@@ -1,0 +1,55 @@
+# 最小可用的**快照模式**配置 —— 只有在公式模式表达不了时才用它。
+#
+# 这里"表达不了"的东西是**过滤器**：{{ device.value | upper }}。
+# 公式模式会把过滤器直接报错（带行号）；快照模式才能渲染。
+#
+# 代价：输出表里是**文本快照**，改了参数必须重跑 render --write-excel，
+# 工作簿不再独立可用。所以能留在公式模式就留在公式模式。
+#
+# 试：
+#   spreadsheet-codegen init   -c minimal-snapshot.yaml --cases dev,prod
+#   spreadsheet-codegen render -c minimal-snapshot.yaml --write-excel
+#   spreadsheet-codegen check  -c minimal-snapshot.yaml
+
+version: 1
+
+excel:
+  output: "minimal_snapshot.xlsx"
+  sheets:
+    global: "Global Parameter"
+    local: "Local Parameter"
+    outputs: ["Output"]
+
+variables:
+  global:
+    - name: project
+      description: "项目代号"
+      default: "P-001"
+      type: string
+
+  local:
+    - name: device
+      description: "设备名（模板里用过滤器转大写）"
+      default: "pump"
+      type: string
+
+    - name: channel
+      description: "通道号"
+      default: 1
+      type: int
+      min: 0
+      max: 15
+
+templates:
+  - name: header
+    description: "生成一段 C 配置头（快照模式：用了过滤器）"
+    output_sheet: "Output"
+    start_cell: "B2"
+    direction: "horizontal"
+    engine: "snapshot"          # ← 显式声明；默认是 excel
+    filename: "{{ case_name }}_header.h"
+    code: |
+      /* {{ project }} / {{ case_name }} */
+      #define {{ device.value | upper }}_CHANNEL {{ channel }}
+      #define {{ device.value | upper }}_LABEL "{{ device.value }}"
+      static const char *plugin = "{{ device.value | pvs('', '_plugin') }}";

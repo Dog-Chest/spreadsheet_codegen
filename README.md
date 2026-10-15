@@ -101,6 +101,7 @@ spreadsheet-codegen render -c examples/basic/example_formula.yaml \
 | [`docs/cli.md`](docs/cli.md) | 命令参考（六个命令的全部选项）、作为 Python 库使用、错误类型 |
 | [`docs/setup.md`](docs/setup.md) | 安装与跨平台环境：uv 零配置、venv + pip、Windows / Ubuntu 的坑、Python 版本策略 |
 | [`spreadsheet_codegen/examples/README.md`](spreadsheet_codegen/examples/README.md) | **内置示例**：三个示例各自演示什么、怎么拷出来、怎么改 |
+| [`.agents/skills/spreadsheet-codegen/`](.agents/skills/spreadsheet-codegen/SKILL.md) | **给 AI agent 的操作手册**（agent skill）：先定引擎、三条工作流、人机分工、报错对照与实测踩坑。放在 `.agents/skills/` 下，支持 agent skill 的工具（如 DeepSeek Harness）会自动发现并加载 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本变更历史 |
 | [`abs_fpi/README.md`](abs_fpi/README.md) | 现场项目：怎么用、边界、四层校验链 |
 | [`docs/publishing.md`](docs/publishing.md) | 维护者向：发布到 GitHub / PyPI、密钥与隐私 |

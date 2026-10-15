@@ -1,0 +1,75 @@
+# 最小可用的**公式模式**配置（默认引擎）—— 拷走改就行。
+#
+# 用途：验证工具链是否通、给新模板库起个头。
+# 试：
+#   spreadsheet-codegen init  -c minimal-formula.yaml --cases dev,prod
+#   spreadsheet-codegen render -c minimal-formula.yaml --write-excel
+#   spreadsheet-codegen check -c minimal-formula.yaml
+#
+# 公式模式的关键约束：模板里**只能**做占位符替换 + 同一行内的 {% if %}。
+# 过滤器 / {% for %} / 跨行 {% if %} 都会报错 —— 那种模板要用 engine: snapshot
+# （见同目录的 minimal-snapshot.yaml）。
+
+version: 1
+
+excel:
+  output: "minimal.xlsx"
+  sheets:
+    global: "Global Parameter"
+    local: "Local Parameter"
+    outputs: ["Output"]
+
+variables:
+  global:
+    - name: project
+      description: "项目代号（所有工况共用一份）"
+      default: "P-001"
+      type: string
+
+    - name: scale
+      description: "缩放系数"
+      default: 1.0
+      type: float
+      min: 0.1
+      max: 100
+
+    - name: scale_mm
+      description: "缩放系数（毫米）= scale × 25.4 —— 派生参数：不用填，改 scale 自动重算"
+      derived: "scale * 25.4"
+      type: float
+      suffix: " mm"
+
+  local:
+    - name: device
+      description: "设备名（每个工况一个）"
+      default: "pump"
+      type: string
+      pattern: "^[a-z][a-z0-9_]*$"
+
+    - name: channel
+      description: "通道号"
+      default: 1
+      type: int
+      min: 0
+      max: 15
+
+    - name: enable
+      description: "是否启用（Excel 里是下拉列表）"
+      default: "yes"
+      choices: ["yes", "no"]
+
+templates:
+  - name: header
+    description: "生成一段 C 配置头（公式模式：改参数后打开 Excel 自己重算）"
+    output_sheet: "Output"
+    start_cell: "B2"
+    direction: "horizontal"
+    engine: "excel"
+    filename: "{{ case_name }}_header.h"
+    code: |
+      /* {{ project }} / {{ case_name }} */
+      static const struct cfg {{ device }}_cfg = {
+          .channel  = {{ channel }},
+          .scale_mm = {{ scale_mm }},
+          .enabled  = {% if enable.value == "yes" %}true{% else %}false{% endif %},
+      };

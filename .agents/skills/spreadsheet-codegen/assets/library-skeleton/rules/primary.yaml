@@ -1,0 +1,61 @@
+# 一套规则集 —— **单独拿出来也必须能 validate**（这是 extends 的硬要求）。
+# 所以这里不写 excel 段（写了也会被根文件忽略并告警），只用默认值。
+#
+#   spreadsheet-codegen validate -c rules/primary.yaml
+
+version: 1
+
+variables:
+  global:
+    - name: project
+      description: "项目代号（全项目共用，只在这张表里填一次）"
+      default: "P-001"
+      type: string
+
+  local:
+    # 这个变量是"归属开关"：case_filter 用它把工况分给不同的规则集。
+    # ⚠ 手工新增 Case 列时**先把它填上** —— 留空会回落 default，这一列就悄悄进了某个规则集。
+    #    给了 choices 之后，空值会直接报错，不再"悄悄"。
+    - name: kind
+      description: "这条工况属于哪套规则（EXT / INT）"
+      default: "EXT"
+      type: string
+      choices: ["EXT", "INT"]
+
+    - name: load
+      description: "载荷"
+      default: 100.0
+      type: float
+      min: 0
+      max: 100000
+      suffix: " kN"
+
+    - name: length
+      description: "长度"
+      default: 12.0
+      type: float
+      min: 0
+      suffix: " m"
+
+    - name: moment
+      description: "弯矩 = 载荷 × 长度 —— 派生参数，不用填"
+      derived: "load * length"
+      type: float
+      suffix: " kNm"
+
+asserts:
+  # 跨变量校验：对每个工况求值，为假就报错并指名道姓。
+  - "length.value > 0"
+  - "moment.value >= 0"
+
+templates:
+  - name: primary
+    description: "主规则集的输出"
+    output_sheet: "Output"
+    start_cell: "B2"
+    direction: "horizontal"
+    engine: "excel"                      # 默认就是它；写出来是为了看清楚
+    case_filter: "kind.value == 'EXT'"   # 只作用于 kind 为 EXT 的工况
+    filename: "{{ case_name }}.js"
+    # 路径相对**声明它的这个文件**解析：rules/../templates/primary.js.j2
+    template_file: "../templates/primary.js.j2"

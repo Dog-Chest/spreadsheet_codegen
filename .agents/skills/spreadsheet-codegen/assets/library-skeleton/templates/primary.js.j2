@@ -1,0 +1,20 @@
+// {{ project }} — {{ case_name }}
+//
+// 这份模板是**纯替换 + 单行分支**，所以能进公式模式：
+// 改了 Global / Local 里的参数，打开 Excel 就自己重算，不需要跑任何命令。
+//
+// 注意下面这些 C / JS 自己的 if-else 和 { } 都只是**字面文本**，不影响公式模式。
+// 拦住公式模式的是 Jinja 自己的循环标签、过滤器和跨行条件 —— 不是目标语言的控制流。
+function build() {
+  var cfg = {
+    case: "{{ case_name }}",
+    project: "{{ project }}",
+    load: {{ load.value }},
+    length: {{ length.value }},
+    moment: {{ moment.value }},
+    // 条件里的变量必须写 .value —— 裸变量在快照模式下是 VarValue 对象，
+    // 直接比数字会抛 TypeError；.value 在两种引擎里都是"纯值"。
+    heavy: {% if load.value > 500 %}true{% else %}false{% endif %},
+  };
+  return cfg;
+}

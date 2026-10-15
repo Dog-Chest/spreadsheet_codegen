@@ -1,0 +1,40 @@
+# 项目配置（根文件）—— 一本工作簿 = 一个 project.yaml。
+#
+# 这个骨架演示"多套规则集共用一本工作簿、共用一张 Global 表"：
+#   根文件负责 **excel 段**与合并；各规则集负责自己的变量与模板。
+#
+# 只有**根文件**的 excel 段生效 —— 被 extends 的文件里写了 excel 会被忽略并告警。
+#
+# 试：
+#   spreadsheet-codegen init   -c project.yaml --cases EXT-1,EXT-2
+#   spreadsheet-codegen validate -c project.yaml
+#   spreadsheet-codegen render -c project.yaml --write-excel --outdir generated/
+#   spreadsheet-codegen check  -c project.yaml
+#
+# 加第二套规则集：写 rules/secondary.yaml（单独拿出来也要 validate 得通），
+# 在下面 extends 里加一行，在 excel.sheets.outputs 里加一张输出表。
+# 只有一套规则集时，不属于它的工况（kind != EXT）不产出任何东西 —— 这是正常的。
+
+version: 1
+
+extends:
+  - rules/primary.yaml        # 路径相对**本文件**解析
+
+excel:
+  output: "library.xlsx"
+  template_sheet: "Template"
+  howto_sheet: "HOWTO"
+  sheets:
+    global: "Global Parameter"
+    local: "Local Parameter"
+    outputs: ["Output"]       # 每个模板的 output_sheet 都必须在这里声明
+
+# 根文件自己的变量与模板追加在这里（同名时**先出现的赢**：extends 的在前）。
+#   variables:
+#     global:
+#       - {name: revision, default: "A", type: string}
+#   templates:
+#     - name: index
+#       output_sheet: "Output"
+#       code: |
+#         // {{ project }} rev {{ revision }}
